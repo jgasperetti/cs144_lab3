@@ -28,6 +28,8 @@
 #ifndef SR_UTILS_H
 #define SR_UTILS_H
 
+#include <stdbool.h>
+
 uint16_t cksum(const void *_data, int len);
 
 uint16_t ethertype(uint8_t *buf);
@@ -44,5 +46,14 @@ void print_hdr_arp(uint8_t *buf);
 
 /* prints all headers, starting from eth */
 void print_hdrs(uint8_t *buf, uint32_t length);
+
+/* Utilities for verifying size of packets */
+/* All expect the size of just the entity being checked for
+* i.e., don't pass the whole ethernet frame size unless that's
+* what you want to verify */
+
+bool valid_eth_size(unsigned int n);
+//bool valid_arp_size(unsigned int n);
+bool valid_ip_packet(uint8_t *pkt); //only checks header
 
 #endif /* -- SR_UTILS_H -- */

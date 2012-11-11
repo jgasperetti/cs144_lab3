@@ -3,7 +3,9 @@
 #include <string.h>
 #include "sr_protocol.h"
 #include "sr_utils.h"
+#include <stdbool.h>
 
+#define ETHERNET_MTU 1500
 
 uint16_t cksum (const void *_data, int len) {
   const uint8_t *data = _data;
@@ -183,3 +185,61 @@ void print_hdrs(uint8_t *buf, uint32_t length) {
   }
 }
 
+
+bool valid_eth_size(unsigned int n) {
+    if (n < sizeof(sr_ethernet_hdr_t)) return false;
+    if (n > ETHERNET_MTU) return false;
+    return true;
+}
+
+bool valid_ip_size(unsigned int n) {
+    if (n < sizeof(sr_ip_hdr_t)) return false;
+    if (n > ETHERNET_MTU) return false;
+    return true;
+}
+
+bool valid_ip_header_size(unsigned int ihl) {
+    if (ihl < 5) return false;
+    if (ihl > 5) {
+        printf("Longer than usual IP header: %d\n", ihl);
+    }
+    return true;
+}
+
+bool valid_arp_size(unsigned int n) {
+    if (n < sizeof(sr_arp_hdr_t)) return false;
+    return true;
+}
+
+#define BYTES_PER_IP_WORD 4
+/**
+* Assumes you've already checked that header length is valid.
+**/
+bool valid_ip_checksum(sr_ip_hdr_t *pkt) {
+    uint16_t transmitted_cksum = pkt->ip_sum;
+    pkt->ip_sum = 0;
+    uint16_t computed_cksum = cksum(pkt, pkt->ip_hl * 4);
+    pkt->ip_sum = transmitted_cksum;
+    if (computed_cksum != transmitted_cksum) return false;
+    return true;
+}
+
+bool valid_ip_packet(uint8_t *pkt) {
+    sr_ip_hdr_t *hdr = (sr_ip_hdr_t *)pkt;
+
+    if(!valid_ip_header_size(hdr->ip_hl)) {
+        printf("IP bad header size \n");
+        return false;
+    }
+
+    if(!valid_ip_size(ntohs(hdr->ip_len))) {
+        printf("IP bad size:%d \n", ntohs(hdr->ip_len));
+        return false;
+    }
+
+    if(!valid_ip_checksum(hdr)) {
+        printf("IP bad checksum\n");
+        return false;
+    }
+    return true;
+}

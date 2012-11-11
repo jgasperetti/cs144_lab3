@@ -50,6 +50,23 @@ void sr_init(struct sr_instance* sr)
 
 } /* -- sr_init -- */
 
+void handle_ip_packet(uint8_t *eth_frame,
+    unsigned int frame_len,
+    char *interface)
+{
+    uint8_t *ip_pkt = eth_frame + sizeof(sr_ethernet_hdr_t);
+    if (!valid_ip_packet(ip_pkt)) return; //drop it
+    printf("\n\nGot a valid packet!! YAYA!!\n\n");
+
+}
+
+void handle_arp_packet(uint8_t *eth_frame,
+    unsigned int len,
+    char *interface)
+{
+
+}
+
 /*---------------------------------------------------------------------
  * Method: sr_handlepacket(uint8_t* p,char* interface)
  * Scope:  Global
@@ -77,8 +94,22 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(interface);
 
   printf("*** -> Received packet of length %d \n",len);
+  print_hdrs(packet, len);
 
-  /* fill in code here */
+  if (!valid_eth_size(len)) return; //drop bad sizes
+
+  uint16_t ethtype = ethertype(packet);
+
+  switch(ethtype) {
+  case ethertype_ip:
+    printf("RECV IP\n");
+    handle_ip_packet(packet, len, interface);
+    break;
+  case ethertype_arp:
+    printf("RECV ARP\n");
+    handle_arp_packet(packet, len, interface);
+    break;
+  }
 
 }/* end sr_ForwardPacket */
 

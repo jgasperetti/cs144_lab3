@@ -1,0 +1,6 @@
+
+Packet validation
+    - length not too long/short
+    - checksum valid
+    - addressed to either our eth addr or the broadcast addr
+

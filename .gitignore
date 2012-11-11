@@ -1,0 +1,8 @@
+*.[do]
+*.pyo
+IP_CONFIG
+cscope.out
+pox/
+router/rtable
+router/sr
+pox_module/cs144.egg-info/
