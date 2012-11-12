@@ -29,6 +29,23 @@
 #define SR_UTILS_H
 
 #include <stdbool.h>
+#include "sr_router.h"
+
+#define ETHERNET_MTU 1500
+
+// ICMP Types
+#define ICMP_UNREACHABLE_TYPE 3
+#define ICMP_ECHO_REPLY_TYPE 0
+#define ICMP_ECHO_REQUEST_TYPE 8
+#define ICMP_TIME_EXCEEDED_TYPE 11
+
+// ICMP Codes
+#define ICMP_ECHO_CODE 0
+#define ICMP_TIME_EXCEEDED_CODE 0
+#define ICMP_NET_UNREACHABLE_CODE 0
+#define ICMP_HOST_UNREACABLE_CODE 1
+#define ICMP_PORT_UNREACHABLE_CODE 3
+
 
 uint16_t cksum(const void *_data, int len);
 
@@ -52,8 +69,29 @@ void print_hdrs(uint8_t *buf, uint32_t length);
 * i.e., don't pass the whole ethernet frame size unless that's
 * what you want to verify */
 
+/* Eth + IP Utilities */
+//Check whether the given transmission was addressed to the given interface
+bool is_dest_if(sr_instance_t *sr, uint8_t *eth_frame, char *if_name);
+
+/* Ethernet Utilities */
 bool valid_eth_size(unsigned int n);
+
+/* IP Header Utilities */
+void set_ip_checksum(sr_ip_hdr_t *header);
+bool valid_ip_header(sr_ip_hdr_t *pkt); //only checks header
+uint8_t dec_ttl(sr_ip_hdr_t *pkt_hdr);
+
+/* ARP Utilities */
 //bool valid_arp_size(unsigned int n);
-bool valid_ip_packet(uint8_t *pkt); //only checks header
+
+/* ICMP Utilities */
+bool valid_icmp_echo_request(uint8_t *eth_frame, unsigned int frame_len);
+bool valid_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len);
+void set_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len);
+unsigned int icmp_len(uint8_t *eth_frame, unsigned int frame_len);
+
+/* Extract higher layer headers from ethernet frame */
+sr_ip_hdr_t *ip_header(uint8_t *eth_frame);
+sr_icmp_hdr_t *icmp_header(uint8_t *eth_frame);
 
 #endif /* -- SR_UTILS_H -- */

@@ -4,3 +4,9 @@ Packet validation
     - checksum valid
     - addressed to either our eth addr or the broadcast addr
 
+Note on Endianness:
+    - Unlike the last lab, I didn't transform the byte order of entire
+        packets at once. Often I only needed to reach into theIP header for
+        only a couple of fields, and such a broad-handed approach didn't
+        seem appropriate. Instead, I use maintain the invariant that things
+        in IP headers are always in network byte order.

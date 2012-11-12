@@ -5,8 +5,6 @@
 #include "sr_utils.h"
 #include <stdbool.h>
 
-#define ETHERNET_MTU 1500
-
 uint16_t cksum (const void *_data, int len) {
   const uint8_t *data = _data;
   uint32_t sum;
@@ -224,7 +222,33 @@ bool valid_ip_checksum(sr_ip_hdr_t *pkt) {
     return true;
 }
 
-bool valid_ip_packet(uint8_t *pkt) {
+void set_ip_checksum(sr_ip_hdr_t *header) {
+    header->ip_sum = 0;
+    header->ip_sum = cksum(header, header->ip_hl * BYTES_PER_IP_WORD);
+}
+
+/* Returns the length of the ICMP section of an ethernet frame */
+unsigned int icmp_len(uint8_t *eth_frame, unsigned int frame_len) {
+    sr_icmp_hdr_t *header = icmp_header(eth_frame);
+    unsigned int eth_ip_hdr_size = (void *)header - (void *)eth_frame;
+    return frame_len - eth_ip_hdr_size;
+}
+
+/* Assumes that icmp_len encompasses header + data which follows */
+void set_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len) {
+    icmp_hdr->icmp_sum = 0;
+    icmp_hdr->icmp_sum = cksum(icmp_hdr, icmp_len);
+}
+
+bool valid_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len) {
+    uint16_t transmitted = icmp_hdr->icmp_sum;
+    set_icmp_checksum(icmp_hdr, icmp_len);
+    uint16_t computed = icmp_hdr->icmp_sum;
+    icmp_hdr->icmp_sum = transmitted;
+    return (transmitted == computed);
+}
+
+bool valid_ip_header(sr_ip_hdr_t *pkt) {
     sr_ip_hdr_t *hdr = (sr_ip_hdr_t *)pkt;
 
     if(!valid_ip_header_size(hdr->ip_hl)) {
@@ -242,4 +266,79 @@ bool valid_ip_packet(uint8_t *pkt) {
         return false;
     }
     return true;
+}
+
+bool valid_icmp_echo_request(uint8_t *eth_frame,
+    unsigned int frame_len) {
+    
+    //Check type and code
+    sr_icmp_hdr_t *header = icmp_header(eth_frame);
+    if (header->icmp_type != ICMP_ECHO_REQUEST_TYPE) return false;
+    if (header->icmp_code != ICMP_ECHO_CODE) return false;
+
+    //Check checksum
+    if(!valid_icmp_checksum(header, icmp_len(eth_frame, frame_len))) return false;
+
+    return true;
+}
+
+sr_ip_hdr_t *ip_header(uint8_t *eth_frame) {
+    return (sr_ip_hdr_t *) (eth_frame + sizeof(sr_ethernet_hdr_t));
+}
+
+sr_icmp_hdr_t *icmp_header(uint8_t *eth_frame) {
+    sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+    unsigned int icmp_hdr_offset = ip_hdr->ip_hl * BYTES_PER_IP_WORD;
+    return (sr_icmp_hdr_t *) ((void *)ip_hdr + icmp_hdr_offset);
+}
+
+
+/**
+* Decrements and returns the TTL of an ip packet
+**/
+uint8_t dec_ttl(sr_ip_hdr_t *pkt_hdr)
+{
+    uint8_t ttl = pkt_hdr->ip_ttl;
+    if (ttl == 0) return 0;
+    --ttl;
+    pkt_hdr->ip_ttl = ttl;
+    return ttl;
+}
+
+bool eth_addr_eq(uint8_t *addr1, uint8_t *addr2)
+{
+    for(int i = 0; i < ETHER_ADDR_LEN; i++) {
+        if (addr1[i] != addr2[i]) return false;
+    }
+    return true;
+}
+
+/**
+* Determines whether the given packet is destined for
+* the given local interface
+* Checks that the eth addr matches and that the ip
+* matches any IP on the device.
+**/
+bool is_dest_if(sr_instance_t *sr, uint8_t *eth_frame,
+    char *if_name)
+{
+    // Check for eth addr match
+    sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *) eth_frame;
+    sr_if_t *iface = sr_get_interface(sr, if_name);
+    if(!eth_addr_eq(eth_hdr->ether_dhost, iface->addr)) return false;
+
+    // Check for IP addr match
+    //sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+    //if(ntohl(ip_hdr->ip_dst) != iface->ip) return false;
+
+    for (struct sr_if *if_walker = sr->if_list;
+         if_walker != NULL;
+         if_walker=if_walker->next) {
+
+        //uint32_t if_ip = if_walker->ip;
+        if (if_walker->ip == iface->ip) return true;
+
+    }
+
+    return false;
 }

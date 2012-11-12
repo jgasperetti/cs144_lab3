@@ -55,6 +55,7 @@ struct sr_instance
     pthread_attr_t attr;
     FILE* logfile;
 };
+typedef struct sr_instance sr_instance_t;
 
 /* -- sr_main.c -- */
 int sr_verify_routing_table(struct sr_instance* sr);

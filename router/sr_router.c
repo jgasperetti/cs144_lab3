@@ -13,7 +13,7 @@
 
 #include <stdio.h>
 #include <assert.h>
-
+#include <string.h>
 
 #include "sr_if.h"
 #include "sr_rt.h"
@@ -50,17 +50,156 @@ void sr_init(struct sr_instance* sr)
 
 } /* -- sr_init -- */
 
-void handle_ip_packet(uint8_t *eth_frame,
-    unsigned int frame_len,
-    char *interface)
+void transmit_ethernet_frame(sr_instance_t *sr, uint8_t *eth_frame,
+    unsigned int frame_len)
 {
-    uint8_t *ip_pkt = eth_frame + sizeof(sr_ethernet_hdr_t);
-    if (!valid_ip_packet(ip_pkt)) return; //drop it
-    printf("\n\nGot a valid packet!! YAYA!!\n\n");
+    printf("\n\nWill try to transmit the following ethernet frame\n");
+    printf("Length: %d\n", frame_len);
+    print_hdrs(eth_frame, frame_len);
+    printf("\nChecking Validity: ");
+    if (valid_ip_header(ip_header(eth_frame))) {
+        printf("Success!!\n"); 
+    } else {
+        printf("Utter failure!\n");
+    }
+    printf("Checking icmp checksum: ");
+    if (valid_icmp_checksum(icmp_header(eth_frame),
+                            icmp_len(eth_frame, frame_len))) {
+        printf("Success!\n");
+    } else {
+        printf("Failure!\n");
+    }
+    printf("END\n\n");
+}
+
+enum icmp_response {
+    icmp_echo_reply,
+    icmp_dest_unreachable,
+    icmp_dest_host_unreachable,
+    icmp_port_unreachable,
+    icmp_time_exceeded
+};
+
+void respond_with_icmp(sr_instance_t  *sr, uint8_t *eth_frame,
+    unsigned int frame_len, char *incoming_if,
+    enum icmp_response response_type)
+{
+
+    //sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+
+    switch(response_type) {
+    case icmp_echo_reply:
+        break;
+    case icmp_dest_unreachable:
+        break;
+    case icmp_dest_host_unreachable:
+        break;
+    case icmp_port_unreachable:
+        break;
+    case icmp_time_exceeded:
+        break;
+    }
 
 }
 
-void handle_arp_packet(uint8_t *eth_frame,
+/**
+* Call this method on incoming packets that need to be routed.
+* This means doing all of the prep necessary to send it out,
+* as well as actually dispatching it on an interface.
+*
+* Do not call this function on packets whose lives end at this hop.
+**/
+void route_ip_packet(sr_instance_t * sr, uint8_t *eth_frame,
+    unsigned int frame_len, char *incoming_if)
+{
+    printf("Routing IP Packet\n");
+    sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+    if (dec_ttl(ip_hdr) == 0) {
+
+    }
+}
+
+/**
+* Packets addressed to an interface of this device are handled here.
+* The only kind of message we care about is ICMP Echo Request, we drop
+* anything else.
+**/
+void handle_local_packet(sr_instance_t *sr, uint8_t *eth_frame,
+    unsigned int frame_len, char *interface)
+{
+    printf("Handling local packet\n");
+
+    uint8_t *ip_pkt = (uint8_t *)ip_header(eth_frame);
+    if (ip_protocol(ip_pkt) != ip_protocol_icmp) {
+        printf("Got garbage other than ICMP addressed to router\n");
+        //TODO send ICMP unreachable response of some sort?
+        return;
+    }
+
+    printf("Handling ICMP message addressed to router\n");
+    if (!valid_icmp_echo_request(eth_frame, frame_len)) {
+        printf("Dropping ICMP that's not valid ECHO request\n");
+        // TODO: respond with ICMP unreachable of some sort?
+    }
+   
+
+    /** Transform ICMP Echo Request into Response **/
+    
+    //Change ICMP type
+    sr_icmp_hdr_t *icmp_hdr = icmp_header(eth_frame);
+    icmp_hdr->icmp_type = ICMP_ECHO_REPLY_TYPE; 
+
+    //Set ICMP checksum
+    set_icmp_checksum(icmp_hdr, icmp_len(eth_frame, frame_len));
+
+    //IP Header - Flip addresses
+    sr_ip_hdr_t *ip_header = (sr_ip_hdr_t *)ip_pkt;
+    uint32_t old_src = ip_header->ip_src;
+    ip_header->ip_src = ip_header->ip_dst;
+    ip_header->ip_dst = old_src;
+    
+    //IP Header - Update TTL
+    ip_header->ip_ttl = INIT_TTL;
+    
+    //IP Header - Recalc checksum
+    set_ip_checksum(ip_header);
+
+    //Flip Eth Header
+    sr_ethernet_hdr_t *eth_header = (sr_ethernet_hdr_t *)eth_frame;
+    uint8_t old_dhost[ETHER_ADDR_LEN];
+    memcpy(old_dhost, eth_header->ether_dhost, ETHER_ADDR_LEN);
+    memcpy(eth_header->ether_dhost, eth_header->ether_shost, ETHER_ADDR_LEN);
+    memcpy(eth_header->ether_shost, old_dhost, ETHER_ADDR_LEN);
+   
+    //Transmit packet
+    transmit_ethernet_frame(sr, eth_frame, frame_len);
+}
+
+
+/**
+* Checks for packet validity.
+* Handles 2 types of incoming
+* - IP packets to a connected host
+* - ICMP packets to this router or a connected host that expire
+*/
+void handle_ip_packet(sr_instance_t *sr, uint8_t *eth_frame,
+    unsigned int frame_len,
+    char *interface)
+{
+    //uint8_t *ip_pkt = eth_frame + sizeof(sr_ethernet_hdr_t);
+    sr_ip_hdr_t *ip_hdr = (uint8_t *)ip_header(eth_frame);
+    if (!valid_ip_header(ip_hdr)) return; //drop it
+    printf("\n\nGot a valid packet!! YAYA!!\n\n");
+
+    if (is_dest_if(sr, eth_frame, interface)) {
+        handle_local_packet(sr, eth_frame, frame_len, interface);
+    } else {
+        route_ip_packet(sr, eth_frame, frame_len, interface);
+    }
+
+}
+
+void handle_arp_packet(sr_instance_t *sr, uint8_t *eth_frame,
     unsigned int len,
     char *interface)
 {
@@ -103,11 +242,11 @@ void sr_handlepacket(struct sr_instance* sr,
   switch(ethtype) {
   case ethertype_ip:
     printf("RECV IP\n");
-    handle_ip_packet(packet, len, interface);
+    handle_ip_packet(sr, packet, len, interface);
     break;
   case ethertype_arp:
     printf("RECV ARP\n");
-    handle_arp_packet(packet, len, interface);
+    handle_arp_packet(sr, packet, len, interface);
     break;
   }
 
