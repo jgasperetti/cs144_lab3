@@ -75,6 +75,9 @@ bool is_dest_if(sr_instance_t *sr, uint8_t *eth_frame, char *if_name);
 
 /* Ethernet Utilities */
 bool valid_eth_size(unsigned int n);
+uint8_t *new_eth_frame(uint8_t *src_addr, 
+                       uint8_t *dst_addr,
+                       unsigned int data_len);
 
 /* IP Header Utilities */
 void set_ip_checksum(sr_ip_hdr_t *header);
@@ -93,5 +96,6 @@ unsigned int icmp_len(uint8_t *eth_frame, unsigned int frame_len);
 /* Extract higher layer headers from ethernet frame */
 sr_ip_hdr_t *ip_header(uint8_t *eth_frame);
 sr_icmp_hdr_t *icmp_header(uint8_t *eth_frame);
+sr_arp_hdr_t *arp_header(uint8_t *eth_frame);
 
 #endif /* -- SR_UTILS_H -- */

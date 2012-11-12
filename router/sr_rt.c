@@ -176,3 +176,25 @@ void sr_print_routing_entry(struct sr_rt* entry)
     printf("%s\n",entry->interface);
 
 } /* -- sr_print_routing_entry -- */
+
+
+sr_rt_t *lookup_route(sr_instance_t *sr, uint32_t ip) {
+    sr_rt_t *best_rt = NULL;
+    uint32_t max_prefix = 0;
+
+    for(sr_rt_t *rt_walker = sr->routing_table;
+        rt_walker != NULL;
+        rt_walker=rt_walker->next) {
+        
+        uint32_t rt_dst = rt_walker->dest.s_addr;
+        uint32_t rt_mask = rt_walker->mask.s_addr;
+        if(rt_mask < max_prefix) continue;
+
+        if((rt_dst & rt_mask) == (ip & rt_mask)) {
+            best_rt = rt_walker;
+            max_prefix = rt_mask;
+        }
+    }
+
+    return best_rt;
+}

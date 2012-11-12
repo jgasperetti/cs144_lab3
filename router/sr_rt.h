@@ -19,6 +19,7 @@
 #include <netinet/in.h>
 
 #include "sr_if.h"
+#include "sr_router.h"
 
 /* ----------------------------------------------------------------------------
  * struct sr_rt
@@ -35,6 +36,7 @@ struct sr_rt
     char   interface[sr_IFACE_NAMELEN];
     struct sr_rt* next;
 };
+typedef struct sr_rt sr_rt_t;
 
 
 int sr_load_rt(struct sr_instance*,const char*);
@@ -43,5 +45,7 @@ void sr_add_rt_entry(struct sr_instance*, struct in_addr,struct in_addr,
 void sr_print_routing_table(struct sr_instance* sr);
 void sr_print_routing_entry(struct sr_rt* entry);
 
+/* Shortest prefix match route */
+sr_rt_t *lookup_route(sr_instance_t *sr, uint32_t ip);
 
 #endif  /* --  sr_RT_H -- */

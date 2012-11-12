@@ -173,6 +173,8 @@ void handle_local_packet(sr_instance_t *sr, uint8_t *eth_frame,
    
     //Transmit packet
     transmit_ethernet_frame(sr, eth_frame, frame_len);
+    int res = sr_send_packet(sr, eth_frame, frame_len, interface);
+    printf("Sent Echo reply with result %d\n", res);
 }
 
 

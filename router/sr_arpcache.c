@@ -10,6 +10,7 @@
 #include "sr_router.h"
 #include "sr_if.h"
 #include "sr_protocol.h"
+#include "sr_utils.h"
 
 /* 
   This function gets called every second. For each request sent out, we keep
@@ -18,6 +19,7 @@
 */
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
     /* Fill this in */
+    //hope the arpcache is in sr
 }
 
 /* You should not need to touch the rest of this code. */
@@ -208,7 +210,7 @@ int sr_arpcache_init(struct sr_arpcache *cache) {
     pthread_mutexattr_init(&(cache->attr));
     pthread_mutexattr_settype(&(cache->attr), PTHREAD_MUTEX_RECURSIVE);
     int success = pthread_mutex_init(&(cache->lock), &(cache->attr));
-    
+
     return success;
 }
 
@@ -245,3 +247,90 @@ void *sr_arpcache_timeout(void *sr_ptr) {
     return NULL;
 }
 
+void check_arp_packet(uint8_t *pkt, unsigned int len) {
+    printf("\n\nTransmitting ARP Packet\n");
+    print_hdrs(pkt, len);
+    printf("\nEND\n");
+}
+
+#define ARP_HRD 1
+#define ARP_PRO 2048
+#define ARP_REQ_OPCODE 1
+#define ARP_REP_OPCODE 2
+
+uint8_t eth_broadcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+void send_arp_packet(sr_instance_t *sr, sr_arpreq_t *req) {
+
+    //Figure out the sending interface
+    char *if_name = req->packets->iface;
+    sr_if_t *iface = sr_get_interface(sr, if_name);
+
+    
+    uint8_t *eth_frame = new_eth_frame(iface->addr,
+                                    eth_broadcast,
+                                    sizeof(sr_arp_hdr_t));
+
+    sr_arp_hdr_t *header = arp_header(eth_frame);
+
+    //Preamble
+    header->ar_hrd = htons(ARP_HRD);
+    header->ar_pro = htons(ARP_PRO);
+    header->ar_hln = ETHER_ADDR_LEN;
+    header->ar_pln = sizeof(uint32_t);
+    header->ar_op = htons(ARP_REQ_OPCODE);
+
+    //Addresses
+    memcpy(header->ar_sha, iface->addr, ETHER_ADDR_LEN);
+    header->ar_sip = iface->ip;
+
+    memcpy(header->ar_tha, eth_broadcast, ETHER_ADDR_LEN);
+    header->ar_tip = req->ip;
+
+    int len = sizeof(sr_arp_hdr_t) + sizeof(sr_ethernet_hdr_t);
+    check_arp_packet(eth_frame, len);
+    int res = sr_send_packet(sr, eth_frame, len, if_name);
+
+    free(eth_frame);
+    printf("Sent arp request with result %d", res);
+}
+
+void send_arpreq(sr_instance_t *sr, sr_arpcache_t *cache, sr_arpreq_t *req) {
+    if (difftime(time(NULL), req->sent) < 1) return;
+
+    if (req->times_sent >= 5) {
+        //send ICMP unreachable to all packets
+        printf("ARP Requst timeout!!");
+        sr_arpreq_destroy(cache, req);
+    } else {
+        send_arp_packet(sr, req);
+        req->sent = time(NULL);
+        req->times_sent++;
+    }
+}
+
+void lookup_eth_and_transmit(sr_instance_t *sr, sr_arpcache_t *cache,
+                             uint8_t *eth_frame, unsigned int len,
+                             char *iface) {
+    sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *)eth_frame;
+    sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+    uint32_t dst_ip = ip_hdr->ip_dst;
+
+    struct sr_arpentry *cached = sr_arpcache_lookup(cache, dst_ip);
+    if(cached) {
+        printf("Have cached entry for ARP req for %x\n", dst_ip);
+        memcpy(eth_hdr->ether_shost, cached->mac, ETHER_ADDR_LEN);
+        printf("transmitting:\n");
+        print_hdrs(eth_frame, len);
+        printf("\n\n");
+        sr_send_packet(sr, eth_frame, len, iface);
+    } else {
+        printf("ARP cache miss for %x\n", dst_ip);
+        sr_arpreq_t *req =\
+            sr_arpcache_queuereq(cache, dst_ip, eth_frame, len, iface);
+
+        
+        send_arpreq(sr, cache, req);
+    }
+
+}

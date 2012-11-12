@@ -248,6 +248,11 @@ bool valid_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len) {
     return (transmitted == computed);
 }
 
+//get addr of arp header from eth frame
+sr_arp_hdr_t *arp_header(uint8_t *eth_frame) {
+    return (sr_arp_hdr_t *)(eth_frame + sizeof(sr_ethernet_hdr_t));
+}
+
 bool valid_ip_header(sr_ip_hdr_t *pkt) {
     sr_ip_hdr_t *hdr = (sr_ip_hdr_t *)pkt;
 
@@ -327,18 +332,36 @@ bool is_dest_if(sr_instance_t *sr, uint8_t *eth_frame,
     sr_if_t *iface = sr_get_interface(sr, if_name);
     if(!eth_addr_eq(eth_hdr->ether_dhost, iface->addr)) return false;
 
-    // Check for IP addr match
-    //sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
-    //if(ntohl(ip_hdr->ip_dst) != iface->ip) return false;
+    sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+    uint32_t dst_ip = ip_hdr->ip_dst;
 
     for (struct sr_if *if_walker = sr->if_list;
          if_walker != NULL;
          if_walker=if_walker->next) {
 
         //uint32_t if_ip = if_walker->ip;
-        if (if_walker->ip == iface->ip) return true;
+        if (if_walker->ip == dst_ip){
+            printf("Match on interface %.4s\n", if_walker->name);
+            print_addr_ip_int(if_walker->ip);
+            printf("\n");
+            print_addr_ip_int(dst_ip);
+            
+            return true;
+        }
 
     }
 
     return false;
 }
+
+uint8_t *new_eth_frame(uint8_t *src_addr, 
+                       uint8_t *dst_addr,
+                       unsigned int data_len)
+{
+    sr_ethernet_hdr_t *hdr = malloc(sizeof(sr_ethernet_hdr_t) + data_len);
+    memcpy(hdr->ether_dhost, dst_addr, ETHER_ADDR_LEN);
+    memcpy(hdr->ether_shost, src_addr, ETHER_ADDR_LEN);
+
+    return (uint8_t *)hdr;
+}
+

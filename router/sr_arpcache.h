@@ -98,6 +98,7 @@ struct sr_arpreq {
     struct sr_packet *packets;  /* List of pkts waiting on this req to finish */
     struct sr_arpreq *next;
 };
+typedef struct sr_arpreq sr_arpreq_t;
 
 struct sr_arpcache {
     struct sr_arpentry entries[SR_ARPCACHE_SZ];
@@ -105,6 +106,8 @@ struct sr_arpcache {
     pthread_mutex_t lock;
     pthread_mutexattr_t attr;
 };
+typedef struct sr_arpcache sr_arpcache_t;
+
 
 /* Checks if an IP->MAC mapping is in the cache. IP is in network byte order. 
    You must free the returned structure if it is not NULL. */
