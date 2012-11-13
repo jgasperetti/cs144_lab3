@@ -270,6 +270,8 @@ void send_arp_packet(sr_instance_t *sr, sr_arpreq_t *req) {
     uint8_t *eth_frame = new_eth_frame(iface->addr,
                                     eth_broadcast,
                                     sizeof(sr_arp_hdr_t));
+    sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *)eth_frame;
+    eth_hdr->ether_type = htons(ethertype_arp);
 
     sr_arp_hdr_t *header = arp_header(eth_frame);
 
@@ -309,28 +311,31 @@ void send_arpreq(sr_instance_t *sr, sr_arpcache_t *cache, sr_arpreq_t *req) {
     }
 }
 
-void lookup_eth_and_transmit(sr_instance_t *sr, sr_arpcache_t *cache,
-                             uint8_t *eth_frame, unsigned int len,
-                             char *iface) {
-    sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *)eth_frame;
-    sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
-    uint32_t dst_ip = ip_hdr->ip_dst;
+/**
+ * Transmits to the given gateway on the given interface
+ * 
+ * Expects complete packets except for ether_dhost
+ **/
+void set_dst_eth_and_transmit(struct sr_instance *sr, uint8_t *eth_frame,
+                unsigned int len, uint32_t gw_ip, char *iface) {
+    printf("food bars?\n");
 
-    struct sr_arpentry *cached = sr_arpcache_lookup(cache, dst_ip);
+    struct sr_arpcache *cache = &(sr->cache);
+    sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *)eth_frame;
+
+    struct sr_arpentry *cached = sr_arpcache_lookup(cache, gw_ip);
     if(cached) {
-        printf("Have cached entry for ARP req for %x\n", dst_ip);
-        memcpy(eth_hdr->ether_shost, cached->mac, ETHER_ADDR_LEN);
+        printf("Have cached entry for ARP req for %x\n", gw_ip);
+        memcpy(eth_hdr->ether_dhost, cached->mac, ETHER_ADDR_LEN);
         printf("transmitting:\n");
         print_hdrs(eth_frame, len);
         printf("\n\n");
         sr_send_packet(sr, eth_frame, len, iface);
     } else {
-        printf("ARP cache miss for %x\n", dst_ip);
+        printf("ARP cache miss for %x\n", gw_ip);
         sr_arpreq_t *req =\
-            sr_arpcache_queuereq(cache, dst_ip, eth_frame, len, iface);
+            sr_arpcache_queuereq(cache, gw_ip, eth_frame, len, iface);
 
-        
         send_arpreq(sr, cache, req);
     }
-
 }

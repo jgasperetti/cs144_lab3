@@ -150,4 +150,8 @@ int   sr_arpcache_init(struct sr_arpcache *cache);
 int   sr_arpcache_destroy(struct sr_arpcache *cache);
 void *sr_arpcache_timeout(void *cache_ptr);
 
+//void sr_foo_bar(struct sr_instance *sr);
+void set_dst_eth_and_transmit(struct sr_instance *sr, uint8_t *eth_frame,
+                unsigned int len, uint32_t gw_ip, char *iface);
+
 #endif

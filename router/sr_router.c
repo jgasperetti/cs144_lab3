@@ -115,8 +115,30 @@ void route_ip_packet(sr_instance_t * sr, uint8_t *eth_frame,
     printf("Routing IP Packet\n");
     sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
     if (dec_ttl(ip_hdr) == 0) {
-
+        //Send ICMP time expired
+        return;
     }
+
+    sr_rt_t *route = lookup_route(sr, ip_hdr->ip_dst);
+    if(!route) {
+        printf("No route to host:");
+        print_addr_ip_int(ntohl(ip_hdr->ip_dst));
+        printf("\n");
+        //Send ICMP no route to host
+        return;
+    }
+
+    sr_if_t *iface = sr_get_interface(sr, route->interface);
+
+    //Set source Eth addr for outgoing interface
+    sr_ethernet_hdr_t *eth_hdr = (sr_ethernet_hdr_t *)eth_frame;
+    memcpy(eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN);
+
+    uint32_t gw_ip = route->gw.s_addr;
+    char *if_name = route->interface;
+
+    set_dst_eth_and_transmit(sr, eth_frame, frame_len, gw_ip, if_name);
+
 }
 
 /**
@@ -189,7 +211,9 @@ void handle_ip_packet(sr_instance_t *sr, uint8_t *eth_frame,
     char *interface)
 {
     //uint8_t *ip_pkt = eth_frame + sizeof(sr_ethernet_hdr_t);
-    sr_ip_hdr_t *ip_hdr = (uint8_t *)ip_header(eth_frame);
+    //sr_ip_hdr_t *ip_hdr = (uint8_t *)ip_header(eth_frame);  <WARNING
+
+    sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
     if (!valid_ip_header(ip_hdr)) return; //drop it
     printf("\n\nGot a valid packet!! YAYA!!\n\n");
 
