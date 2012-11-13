@@ -154,4 +154,7 @@ void *sr_arpcache_timeout(void *cache_ptr);
 void set_dst_eth_and_transmit(struct sr_instance *sr, uint8_t *eth_frame,
                 unsigned int len, uint32_t gw_ip, char *iface);
 
+void cache_arp_reply(struct sr_instance *sr, uint8_t *ethernet_frame,
+                      unsigned int len, char *if_name);
+
 #endif

@@ -119,6 +119,8 @@ void route_ip_packet(sr_instance_t * sr, uint8_t *eth_frame,
         return;
     }
 
+    set_ip_checksum(ip_hdr);
+
     sr_rt_t *route = lookup_route(sr, ip_hdr->ip_dst);
     if(!route) {
         printf("No route to host:");
@@ -229,7 +231,8 @@ void handle_arp_packet(sr_instance_t *sr, uint8_t *eth_frame,
     unsigned int len,
     char *interface)
 {
-
+    printf("handling it\n");
+    cache_arp_reply(sr, eth_frame, len, interface);
 }
 
 /*---------------------------------------------------------------------
