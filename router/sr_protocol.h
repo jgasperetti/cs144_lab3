@@ -87,6 +87,13 @@ struct sr_icmp_hdr {
 } __attribute__ ((packed)) ;
 typedef struct sr_icmp_hdr sr_icmp_hdr_t;
 
+struct sr_icmp_msg {
+    struct sr_icmp_hdr header;
+    uint32_t unused;
+    uint8_t data[];
+} __attribute__ ((packed)) ;
+typedef struct sr_icmp_msg sr_icmp_msg_t;
+
 
 /* Structure of a type3 ICMP header
  */
@@ -100,8 +107,6 @@ struct sr_icmp_t3_hdr {
 
 } __attribute__ ((packed)) ;
 typedef struct sr_icmp_t3_hdr sr_icmp_t3_hdr_t;
-
-
 
 
 /*

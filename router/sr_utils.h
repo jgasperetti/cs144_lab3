@@ -92,6 +92,8 @@ bool valid_icmp_echo_request(uint8_t *eth_frame, unsigned int frame_len);
 bool valid_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len);
 void set_icmp_checksum(sr_icmp_hdr_t *icmp_hdr, unsigned int icmp_len);
 unsigned int icmp_len(uint8_t *eth_frame, unsigned int frame_len);
+uint8_t *new_icmp_response(uint8_t *eth_frame, uint32_t src_ip_addr,
+                           uint8_t type, uint8_t code);
 
 /* Extract higher layer headers from ethernet frame */
 sr_ip_hdr_t *ip_header(uint8_t *eth_frame);

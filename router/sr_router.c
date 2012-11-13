@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "sr_if.h"
 #include "sr_rt.h"
@@ -49,7 +50,9 @@ void sr_init(struct sr_instance* sr)
     /* Add initialization code here! */
 
 } /* -- sr_init -- */
+                            
 
+/** Warning: doesn't actully send anything, just a diagnostic **/
 void transmit_ethernet_frame(sr_instance_t *sr, uint8_t *eth_frame,
     unsigned int frame_len)
 {
@@ -80,26 +83,54 @@ enum icmp_response {
     icmp_time_exceeded
 };
 
-void respond_with_icmp(sr_instance_t  *sr, uint8_t *eth_frame,
-    unsigned int frame_len, char *incoming_if,
+void respond_with_icmp(sr_instance_t *sr, uint8_t *eth_frame,
+    char *incoming_if,
     enum icmp_response response_type)
 {
 
-    //sr_ip_hdr_t *ip_hdr = ip_header(eth_frame);
+    uint32_t src_ip = sr_get_interface(sr, incoming_if)->ip;
 
-    switch(response_type) {
-    case icmp_echo_reply:
-        break;
-    case icmp_dest_unreachable:
-        break;
-    case icmp_dest_host_unreachable:
-        break;
-    case icmp_port_unreachable:
-        break;
-    case icmp_time_exceeded:
-        break;
+    uint8_t *new_frame;
+
+    if (response_type == icmp_dest_unreachable) {
+        new_frame = new_icmp_response(eth_frame, src_ip, 3, 0);
+    } else if (response_type == icmp_dest_host_unreachable) {
+        new_frame = new_icmp_response(eth_frame, src_ip, 3, 1); 
+    } else if (response_type == icmp_port_unreachable) {
+        printf("Port unreachable\n");
+        new_frame = new_icmp_response(eth_frame, src_ip, 3, 3);
+    } else if (response_type == icmp_time_exceeded) {
+        new_frame = new_icmp_response(eth_frame, src_ip, 11, 0);
     }
 
+    //transmit new frame
+    unsigned int new_frame_len = sizeof(sr_ethernet_hdr_t) + 
+                                 ip_header(new_frame)->ip_len;
+    
+    /** Sanity checking **/
+    printf("Sending ICMP\n");
+    print_hdrs(new_frame, new_frame_len);
+
+    sr_ip_hdr_t *new_ip_hdr = ip_header(new_frame);
+
+    printf("Checking IP validity: ");
+    if (valid_ip_header(ip_header(new_frame))) {
+        printf("Valid\n");
+    } else {
+        printf("Invalid\n");
+    }
+
+    unsigned int icmp_len = ntohs(new_ip_hdr->ip_len) - new_ip_hdr->ip_hl;
+    printf("Checking ICMP validity: ");
+    if (valid_icmp_checksum(icmp_header(new_frame), icmp_len)) {
+        printf("Valid \n");
+    } else {
+        printf("Invalid \n");
+    }
+    /** Sanity checking **/
+
+    sr_send_packet(sr, new_frame, new_frame_len, incoming_if);
+    free(new_frame);
 }
 
 /**
@@ -156,14 +187,14 @@ void handle_local_packet(sr_instance_t *sr, uint8_t *eth_frame,
     uint8_t *ip_pkt = (uint8_t *)ip_header(eth_frame);
     if (ip_protocol(ip_pkt) != ip_protocol_icmp) {
         printf("Got garbage other than ICMP addressed to router\n");
-        //TODO send ICMP unreachable response of some sort?
+        respond_with_icmp(sr, eth_frame, interface, icmp_port_unreachable);
         return;
     }
 
     printf("Handling ICMP message addressed to router\n");
     if (!valid_icmp_echo_request(eth_frame, frame_len)) {
         printf("Dropping ICMP that's not valid ECHO request\n");
-        // TODO: respond with ICMP unreachable of some sort?
+        return;
     }
    
 
@@ -261,8 +292,7 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(packet);
   assert(interface);
 
-  printf("*** -> Received packet of length %d \n",len);
-  print_hdrs(packet, len);
+  //printf("*** -> Received packet of length %d \n",len);
 
   if (!valid_eth_size(len)) return; //drop bad sizes
 
@@ -271,6 +301,7 @@ void sr_handlepacket(struct sr_instance* sr,
   switch(ethtype) {
   case ethertype_ip:
     printf("RECV IP\n");
+    print_hdrs(packet, len);
     handle_ip_packet(sr, packet, len, interface);
     break;
   case ethertype_arp:

@@ -358,10 +358,71 @@ uint8_t *new_eth_frame(uint8_t *src_addr,
                        uint8_t *dst_addr,
                        unsigned int data_len)
 {
-    sr_ethernet_hdr_t *hdr = malloc(sizeof(sr_ethernet_hdr_t) + data_len);
+    sr_ethernet_hdr_t *hdr = calloc(sizeof(sr_ethernet_hdr_t) + data_len,
+                                    sizeof(uint8_t));
     memcpy(hdr->ether_dhost, dst_addr, ETHER_ADDR_LEN);
     memcpy(hdr->ether_shost, src_addr, ETHER_ADDR_LEN);
 
     return (uint8_t *)hdr;
 }
 
+#define ICMP_IP_BODY_SIZE 8
+uint8_t *new_icmp_response(uint8_t *eth_frame, uint32_t src_ip_addr,
+                           uint8_t type, uint8_t code) {
+
+    sr_ip_hdr_t *orig_ip_hdr = ip_header(eth_frame);
+    unsigned int orig_hdr_len = orig_ip_hdr->ip_hl;
+    unsigned int orig_body_len = orig_ip_hdr->ip_len - orig_hdr_len;
+    //TODO ^^^ IS ip_len whole packet or just body???
+   
+   
+    //smaller of 8 and orig body len 
+    unsigned int resp_ip_body_len = \
+        (orig_body_len > ICMP_IP_BODY_SIZE) ? ICMP_IP_BODY_SIZE : orig_body_len;
+
+    // Total size = eth hdr + ip hdr + icmp hdr + unused + icmp payload (ip+8)
+    //Sum of everything except the ETH header
+    unsigned int new_frame_len = sizeof(sr_ip_hdr_t) +
+                                 sizeof(sr_icmp_hdr_t) +
+                                 sizeof(uint32_t) + //unused
+                                 orig_hdr_len +
+                                 resp_ip_body_len;
+                                
+    printf("New Frame Len: %d\n", new_frame_len); 
+    printf("orig_hdr_len: %d\n", orig_hdr_len);
+    printf("resp_ip_body_len: %d\n", resp_ip_body_len);
+
+    sr_ethernet_hdr_t *old_eth_hdr = (sr_ethernet_hdr_t *) eth_frame;
+    uint8_t *new_frame = new_eth_frame(old_eth_hdr->ether_dhost,
+                                       old_eth_hdr->ether_shost,
+                                       new_frame_len);
+    //Set ethertype
+    sr_ethernet_hdr_t *new_eth_hdr = (sr_ethernet_hdr_t *)new_frame;
+    new_eth_hdr->ether_type = htons(ethertype_ip);
+    
+    //Set IP header from old ip header
+    sr_ip_hdr_t *ip_hdr = ip_header(new_frame);
+    ip_hdr->ip_v = 4;
+    ip_hdr->ip_hl = 5;
+    ip_hdr->ip_len = htons(new_frame_len);
+    ip_hdr->ip_ttl = INIT_TTL;
+    ip_hdr->ip_p = ip_protocol_icmp;
+    ip_hdr->ip_src = src_ip_addr;
+    ip_hdr->ip_dst = orig_ip_hdr->ip_src;
+
+    //Set IP Checksum
+    set_ip_checksum(ip_hdr); 
+
+    //ICMP Header and checksum
+    sr_icmp_msg_t *icmp_msg = (sr_icmp_msg_t *)icmp_header(new_frame);
+    icmp_msg->header.icmp_type = type;
+    icmp_msg->header.icmp_code = code;
+
+    uint8_t *icmp_data = &(icmp_msg->data);
+    memcpy(icmp_data, orig_ip_hdr, orig_hdr_len + resp_ip_body_len);
+
+    unsigned int icmp_len = sizeof(icmp_msg) + orig_hdr_len + resp_ip_body_len;
+    set_icmp_checksum((sr_icmp_hdr_t *)icmp_msg, icmp_len);
+
+    return new_frame;
+}
