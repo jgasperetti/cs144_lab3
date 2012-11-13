@@ -370,29 +370,11 @@ uint8_t *new_eth_frame(uint8_t *src_addr,
 uint8_t *new_icmp_response(uint8_t *eth_frame, uint32_t src_ip_addr,
                            uint8_t type, uint8_t code) {
 
+    printf("sizeof ip_hdr_t: %d\n", sizeof(sr_ip_hdr_t));
+    sr_ethernet_hdr_t *old_eth_hdr = (sr_ethernet_hdr_t *)eth_frame;
+   
     sr_ip_hdr_t *orig_ip_hdr = ip_header(eth_frame);
-    unsigned int orig_hdr_len = orig_ip_hdr->ip_hl;
-    unsigned int orig_body_len = orig_ip_hdr->ip_len - orig_hdr_len;
-    //TODO ^^^ IS ip_len whole packet or just body???
-   
-   
-    //smaller of 8 and orig body len 
-    unsigned int resp_ip_body_len = \
-        (orig_body_len > ICMP_IP_BODY_SIZE) ? ICMP_IP_BODY_SIZE : orig_body_len;
-
-    // Total size = eth hdr + ip hdr + icmp hdr + unused + icmp payload (ip+8)
-    //Sum of everything except the ETH header
-    unsigned int new_frame_len = sizeof(sr_ip_hdr_t) +
-                                 sizeof(sr_icmp_hdr_t) +
-                                 sizeof(uint32_t) + //unused
-                                 orig_hdr_len +
-                                 resp_ip_body_len;
-                                
-    printf("New Frame Len: %d\n", new_frame_len); 
-    printf("orig_hdr_len: %d\n", orig_hdr_len);
-    printf("resp_ip_body_len: %d\n", resp_ip_body_len);
-
-    sr_ethernet_hdr_t *old_eth_hdr = (sr_ethernet_hdr_t *) eth_frame;
+    unsigned int new_frame_len = 20 + sizeof(struct sr_icmp_t3_hdr);
     uint8_t *new_frame = new_eth_frame(old_eth_hdr->ether_dhost,
                                        old_eth_hdr->ether_shost,
                                        new_frame_len);
@@ -414,15 +396,12 @@ uint8_t *new_icmp_response(uint8_t *eth_frame, uint32_t src_ip_addr,
     set_ip_checksum(ip_hdr); 
 
     //ICMP Header and checksum
-    sr_icmp_msg_t *icmp_msg = (sr_icmp_msg_t *)icmp_header(new_frame);
-    icmp_msg->header.icmp_type = type;
-    icmp_msg->header.icmp_code = code;
+    struct sr_icmp_t3_hdr *icmp_resp = icmp_header(new_frame);
+    icmp_resp->icmp_type = type;
+    icmp_resp->icmp_code = code;
 
-    uint8_t *icmp_data = &(icmp_msg->data);
-    memcpy(icmp_data, orig_ip_hdr, orig_hdr_len + resp_ip_body_len);
-
-    unsigned int icmp_len = sizeof(icmp_msg) + orig_hdr_len + resp_ip_body_len;
-    set_icmp_checksum((sr_icmp_hdr_t *)icmp_msg, icmp_len);
+    memcpy(&(icmp_resp->data), eth_frame + sizeof(sr_ethernet_hdr_t), ICMP_DATA_SIZE);
+    set_icmp_checksum((sr_icmp_hdr_t *)icmp_resp, sizeof(struct sr_icmp_t3_hdr));
 
     return new_frame;
 }
